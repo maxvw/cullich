@@ -4,6 +4,7 @@
     "": {
       "name": "bun-react-template",
       "dependencies": {
+        "@immich/sdk": "^2.5.6",
         "react": "^19",
         "react-dom": "^19",
       },
@@ -15,6 +16,10 @@
     },
   },
   "packages": {
+    "@immich/sdk": ["@immich/sdk@2.5.6", "", { "dependencies": { "@oazapfts/runtime": "^1.0.2" } }, "sha512-u6o0rNBsTbAkl/6vz3Z63A/yNkLYeuKiHKoJgLuvRqTpPahgxAFcfDeN8rLd0Ya1kM5I2c610/VDcvItzzVcWg=="],
+
+    "@oazapfts/runtime": ["@oazapfts/runtime@1.2.0", "", {}, "sha512-fi7dp7dNayyh/vzqhf0ZdoPfC7tJvYfjaE8MBL1yR+iIsH7cFoqHt+DV70VU49OMCqLc7wQa+yVJcSmIRnV4wA=="],
+
     "@types/bun": ["@types/bun@1.3.9", "", { "dependencies": { "bun-types": "1.3.9" } }, "sha512-KQ571yULOdWJiMH+RIWIOZ7B2RXQGpL1YQrBtLIV3FqDcCu6FsbFUBwhdKUlCKUpS3PJDsHlJ1QKlpxoVR+xtw=="],
 
     "@types/node": ["@types/node@25.3.0", "", { "dependencies": { "undici-types": "~7.18.0" } }, "sha512-4K3bqJpXpqfg2XKGK9bpDTc6xO/xoUP/RBWS7AtRMug6zZFaRekiLzjVtAoZMquxoAbzBvy5nxQ7veS5eYzf8A=="],
