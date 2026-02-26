@@ -41,9 +41,19 @@ export const getBuckets = async (req) => {
 
 export const getPhotos = {
   async GET(req) {
+    const { searchParams } = new URL(req.url);
+
+    const year = parseInt(searchParams.get("year"), 10);
+    const month = parseInt(searchParams.get("month"), 10);
+
+    const takenAfter = new Date(Date.UTC(year, month - 1, 1)).toISOString();
+    const takenBefore = new Date(Date.UTC(year, month, 1)).toISOString(); // first day of next month
+
     const response = await searchAssets({
       metadataSearchDto: {
-        withExif: true,
+        takenAfter,
+        takenBefore,
+        withExif: false, // no need for it
         page: 1,
         size: 1000,
       },
