@@ -1,12 +1,13 @@
 import { serve } from "bun";
 import index from "./index.html";
 
-import { PhotosApi } from "./api/photos";
+import { getBuckets, getPhotos } from "./api/photos";
 
 const server = serve({
   routes: {
     "/": index,
-    "/api/photos": PhotosApi
+    "/api/buckets": getBuckets,
+    "/api/photos": getPhotos,
   },
 
   development: process.env.NODE_ENV !== "production" && {

@@ -1,4 +1,4 @@
-import { init, searchAssets, getAssetThumbnailPath, getAssetOriginalPath, getAssetPlaybackPath, type AssetResponseDto } from "@immich/sdk";
+import { init, searchAssets, getTimeBuckets, getAssetThumbnailPath, getAssetOriginalPath, getAssetPlaybackPath, type AssetResponseDto } from "@immich/sdk";
 import { join } from "path";
 
 init({
@@ -6,23 +6,46 @@ init({
   apiKey: process.env.IMMICH_API_KEY,
 });
 
-const url = (path: string) => {
+const url = (path: string, query?: string) => {
   const parsedUrl = URL.parse(process.env.IMMICH_BASE_URL);
   parsedUrl.pathname = join(parsedUrl.pathname, path);
   parsedUrl.search = parsedUrl.search
     ? parsedUrl.search + `&apiKey=${process.env.IMMICH_API_KEY}`
     : `?apiKey=${process.env.IMMICH_API_KEY}`;
 
+  if (query) {
+    parsedUrl.search += `&${query}`;
+  }
+
   return parsedUrl;
 };
 
-export const PhotosApi = {
+export const getBuckets = async (req) => {
+  const buckets = await getTimeBuckets({});
+
+  return Response.json(buckets.map((bucket) => {
+    const [year, month] = bucket.timeBucket.split("-").map(Number);
+    const monthYear = new Date(year, month - 1).toLocaleString("default", {
+      month: "long",
+      year: "numeric",
+    });
+
+    return {
+      year,
+      month,
+      label: monthYear,
+      count: bucket.count,
+    };
+  }));
+}
+
+export const getPhotos = {
   async GET(req) {
     const response = await searchAssets({
       metadataSearchDto: {
         withExif: true,
         page: 1,
-        size: 50,
+        size: 1000,
       },
     });
 
@@ -30,12 +53,10 @@ export const PhotosApi = {
       photos: response.assets.items.map((asset) => {
         return {
           id: asset.id,
-          type: asset.type,
-          thumbhash: asset.thumbhash,
-          originalFileName: asset.originalFileName,
-          assetThumbnailPath: url(getAssetThumbnailPath(asset.id)),
-          assetOriginalPath: url(getAssetOriginalPath(asset.id)),
-          assetPlaybackPath: url(getAssetPlaybackPath(asset.id)),
+          isVideo: asset.type === "VIDEO",
+          thumb: url(getAssetThumbnailPath(asset.id)),
+          src: url(getAssetThumbnailPath(asset.id), "size=preview"),
+          videoSrc: url(getAssetPlaybackPath(asset.id)),
         };
       })
     });
