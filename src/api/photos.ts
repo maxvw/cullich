@@ -127,6 +127,7 @@ export const getPhotos = async (req) => {
 				src: url(getAssetThumbnailPath(asset.id), "size=preview"),
 				videoSrc: url(getAssetPlaybackPath(asset.id)),
 				status,
+				initialStatus: status,
 			};
 		}),
 	});
