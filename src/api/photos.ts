@@ -16,6 +16,9 @@ init({
 	apiKey: process.env.IMMICH_API_KEY,
 });
 
+const TAG_KEEP = process.env.IMMICH_TAG_KEEP ?? "Cullich-Keep";
+const TAG_REJECT = process.env.IMMICH_TAG_REJECT ?? "Cullich-Reject";
+
 const url = (path: string, query?: string) => {
 	const parsedUrl = URL.parse(process.env.IMMICH_BASE_URL);
 	parsedUrl.pathname = join(parsedUrl.pathname, path);
@@ -118,8 +121,8 @@ export const getPhotos = async (req) => {
 	};
 
 	// Get tag IDs for keep/reject
-	const pickTagId = await getTagId("Cullich-Keep");
-	const rejectTagId = await getTagId("Cullich-Reject");
+	const pickTagId = await getTagId(TAG_KEEP);
+	const rejectTagId = await getTagId(TAG_REJECT);
 
 	// The Search API does not return the tags/tagIds in the search results,
 	// despite documentation mentioning it.
