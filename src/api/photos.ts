@@ -1,5 +1,6 @@
 import {
 	init,
+	upsertTags,
 	searchAssets,
 	AssetVisibility,
 	getTimeBuckets,
@@ -56,6 +57,28 @@ const assetIds = (assets) => {
 	return new Set(assets.map((asset) => asset.id));
 };
 
+const tagCache = new Map<string, Promise<string>>();
+
+async function getTagId(tag: string): Promise<string> {
+	if (!tagCache.has(tag)) {
+		tagCache.set(
+			tag,
+			upsertTags({
+				tagUpsertDto: {
+					tags: [tag],
+				},
+			})
+				.then(([tag]) => tag.id)
+				.catch((err) => {
+					tagCache.delete(tag);
+					throw err;
+				}),
+		);
+	}
+
+	return tagCache.get(tag)!;
+}
+
 export const getBuckets = async (req) => {
 	const buckets = await getTimeBuckets({});
 
@@ -94,6 +117,10 @@ export const getPhotos = async (req) => {
 		size: 1000,
 	};
 
+	// Get tag IDs for keep/reject
+	const pickTagId = await getTagId("Cullich-Keep");
+	const rejectTagId = await getTagId("Cullich-Reject");
+
 	// The Search API does not return the tags/tagIds in the search results,
 	// despite documentation mentioning it.
 
@@ -101,13 +128,13 @@ export const getPhotos = async (req) => {
 	// separately unfortunately.
 	const rejected = assetIds(
 		await fetchPhotos(searchDto, {
-			tagIds: ["4aa1e6a6-f42b-4f9b-a4ec-77fea559264a"],
+			tagIds: [rejectTagId],
 		}),
 	);
 
-	const approved = assetIds(
+	const picked = assetIds(
 		await fetchPhotos(searchDto, {
-			tagIds: ["70a72afe-c24d-4419-a19a-a7c3313a65ce"],
+			tagIds: [pickTagId],
 		}),
 	);
 
@@ -118,7 +145,7 @@ export const getPhotos = async (req) => {
 		photos: assets.map((asset) => {
 			let status = "unreviewed";
 			if (rejected.has(asset.id)) status = "reject";
-			if (approved.has(asset.id)) status = "pick";
+			if (picked.has(asset.id)) status = "pick";
 
 			return {
 				id: asset.id,
