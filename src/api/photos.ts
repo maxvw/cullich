@@ -2,6 +2,8 @@ import {
 	init,
 	upsertTags,
 	searchAssets,
+	untagAssets,
+	bulkTagAssets,
 	AssetVisibility,
 	getTimeBuckets,
 	getAssetThumbnailPath,
@@ -161,4 +163,43 @@ export const getPhotos = async (req) => {
 			};
 		}),
 	});
+};
+
+export const persistPhotos = {
+	POST: async (req) => {
+		const body = await req.json();
+
+		// Get picks/reject asset ids
+		const picks = body.picks ?? [];
+		const rejects = body.rejects ?? [];
+
+		// Get tag IDs for keep/reject
+		const pickTagId = await getTagId(TAG_KEEP);
+		const rejectTagId = await getTagId(TAG_REJECT);
+
+		// Get all unique asset ids
+		const assetIds = Array.from(new Set([...picks, ...rejects]));
+
+		// Remove all tags
+		if (assetIds.length) {
+			await untagAssets({ id: pickTagId, bulkIdsDto: { ids: assetIds } });
+			await untagAssets({ id: rejectTagId, bulkIdsDto: { ids: assetIds } });
+		}
+
+		// Assign correct tags
+		if (picks.length) {
+			await bulkTagAssets({
+				tagBulkAssetsDto: { assetIds: picks, tagIds: [pickTagId] },
+			});
+		}
+
+		if (rejects.length) {
+			await bulkTagAssets({
+				tagBulkAssetsDto: { assetIds: rejects, tagIds: [rejectTagId] },
+			});
+		}
+
+		// Done.
+		return Response.json({ saved: true });
+	},
 };
