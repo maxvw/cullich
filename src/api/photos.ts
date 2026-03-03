@@ -177,13 +177,10 @@ export const persistPhotos = {
 		const pickTagId = await getTagId(TAG_KEEP);
 		const rejectTagId = await getTagId(TAG_REJECT);
 
-		// Get all unique asset ids
-		const assetIds = Array.from(new Set([...picks, ...rejects]));
-
 		// Remove all tags
 		if (assetIds.length) {
-			await untagAssets({ id: pickTagId, bulkIdsDto: { ids: assetIds } });
-			await untagAssets({ id: rejectTagId, bulkIdsDto: { ids: assetIds } });
+			await untagAssets({ id: pickTagId, bulkIdsDto: { ids: rejects } });
+			await untagAssets({ id: rejectTagId, bulkIdsDto: { ids: picks } });
 		}
 
 		// Assign correct tags
