@@ -12,6 +12,7 @@ import {
 	type AssetResponseDto,
 } from "@immich/sdk";
 import { join } from "path";
+import { chunkArray } from "../utils/chunkArray";
 
 init({
 	baseUrl: process.env.IMMICH_BASE_URL,
@@ -169,6 +170,10 @@ export const persistPhotos = {
 	POST: async (req) => {
 		const body = await req.json();
 
+		// The API is not clear on whether there is a limit or not, but it feels
+		// nicer to do this in chunks / have some limit.
+		const CHUNK_SIZE = 500;
+
 		// Get picks/reject asset ids
 		const picks = body.picks ?? [];
 		const rejects = body.rejects ?? [];
@@ -177,22 +182,23 @@ export const persistPhotos = {
 		const pickTagId = await getTagId(TAG_KEEP);
 		const rejectTagId = await getTagId(TAG_REJECT);
 
-		// Remove all tags
-		if (assetIds.length) {
-			await untagAssets({ id: pickTagId, bulkIdsDto: { ids: rejects } });
-			await untagAssets({ id: rejectTagId, bulkIdsDto: { ids: picks } });
+		// Remove all tags in chunks
+		for (const chunk of chunkArray(rejects, CHUNK_SIZE)) {
+			await untagAssets({ id: pickTagId, bulkIdsDto: { ids: chunk } });
+		}
+		for (const chunk of chunkArray(picks, CHUNK_SIZE)) {
+			await untagAssets({ id: rejectTagId, bulkIdsDto: { ids: chunk } });
 		}
 
-		// Assign correct tags
-		if (picks.length) {
+		// Assign correct tags in chunks
+		for (const chunk of chunkArray(picks, CHUNK_SIZE)) {
 			await bulkTagAssets({
-				tagBulkAssetsDto: { assetIds: picks, tagIds: [pickTagId] },
+				tagBulkAssetsDto: { assetIds: chunk, tagIds: [pickTagId] },
 			});
 		}
-
-		if (rejects.length) {
+		for (const chunk of chunkArray(rejects, CHUNK_SIZE)) {
 			await bulkTagAssets({
-				tagBulkAssetsDto: { assetIds: rejects, tagIds: [rejectTagId] },
+				tagBulkAssetsDto: { assetIds: chunk, tagIds: [rejectTagId] },
 			});
 		}
 
