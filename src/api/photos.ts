@@ -10,20 +10,30 @@ import {
 	getAssetOriginalPath,
 	getAssetPlaybackPath,
 	type AssetResponseDto,
+	type MetadataSearchDto,
 } from "@immich/sdk";
 import { join } from "path";
 import { chunkArray } from "../utils/chunkArray";
 
+const IMMICH_BASE_URL = process.env.IMMICH_BASE_URL ?? "https://example.com";
+const IMMICH_API_KEY = process.env.IMMICH_API_KEY ?? "abc123";
+
+interface Asset {
+	id: string;
+}
+
 init({
-	baseUrl: process.env.IMMICH_BASE_URL,
-	apiKey: process.env.IMMICH_API_KEY,
+	baseUrl: IMMICH_BASE_URL,
+	apiKey: IMMICH_API_KEY,
 });
 
 const TAG_KEEP = process.env.IMMICH_TAG_KEEP ?? "Cullich-Keep";
 const TAG_REJECT = process.env.IMMICH_TAG_REJECT ?? "Cullich-Reject";
 
 const url = (path: string, query?: string) => {
-	const parsedUrl = URL.parse(process.env.IMMICH_BASE_URL);
+	const parsedUrl = URL.parse(IMMICH_BASE_URL);
+	if (!parsedUrl) return path;
+
 	parsedUrl.pathname = join(parsedUrl.pathname, path);
 	parsedUrl.search = parsedUrl.search
 		? parsedUrl.search + `&apiKey=${process.env.IMMICH_API_KEY}`
@@ -36,7 +46,7 @@ const url = (path: string, query?: string) => {
 	return parsedUrl;
 };
 
-const fetchPhotos = async (dto, additional = {}) => {
+const fetchPhotos = async (dto: MetadataSearchDto, additional = {}) => {
 	const allAssets = [];
 	let page = 1;
 
@@ -59,7 +69,7 @@ const fetchPhotos = async (dto, additional = {}) => {
 	return allAssets;
 };
 
-const assetIds = (assets) => {
+const assetIds = (assets: Asset[]): Set<string> => {
 	return new Set(assets.map((asset) => asset.id));
 };
 
@@ -85,7 +95,7 @@ async function getTagId(tag: string): Promise<string> {
 	return tagCache.get(tag)!;
 }
 
-export const getBuckets = async (req) => {
+export const getBuckets = async (req: Request) => {
 	const buckets = await getTimeBuckets({});
 
 	return Response.json(
@@ -106,11 +116,11 @@ export const getBuckets = async (req) => {
 	);
 };
 
-export const getPhotos = async (req) => {
+export const getPhotos = async (req: Request) => {
 	const { searchParams } = new URL(req.url);
 
-	const year = parseInt(searchParams.get("year"), 10);
-	const month = parseInt(searchParams.get("month"), 10);
+	const year = parseInt(searchParams.get("year") ?? "", 10);
+	const month = parseInt(searchParams.get("month") ?? "", 10);
 
 	const takenAfter = new Date(Date.UTC(year, month - 1, 1)).toISOString();
 	const takenBefore = new Date(Date.UTC(year, month, 1)).toISOString(); // first day of next month
@@ -167,7 +177,7 @@ export const getPhotos = async (req) => {
 };
 
 export const persistPhotos = {
-	POST: async (req) => {
+	POST: async (req: Request) => {
 		const body = await req.json();
 
 		// The API is not clear on whether there is a limit or not, but it feels
@@ -183,20 +193,20 @@ export const persistPhotos = {
 		const rejectTagId = await getTagId(TAG_REJECT);
 
 		// Remove all tags in chunks
-		for (const chunk of chunkArray(rejects, CHUNK_SIZE)) {
+		for (const chunk of chunkArray<string>(rejects, CHUNK_SIZE)) {
 			await untagAssets({ id: pickTagId, bulkIdsDto: { ids: chunk } });
 		}
-		for (const chunk of chunkArray(picks, CHUNK_SIZE)) {
+		for (const chunk of chunkArray<string>(picks, CHUNK_SIZE)) {
 			await untagAssets({ id: rejectTagId, bulkIdsDto: { ids: chunk } });
 		}
 
 		// Assign correct tags in chunks
-		for (const chunk of chunkArray(picks, CHUNK_SIZE)) {
+		for (const chunk of chunkArray<string>(picks, CHUNK_SIZE)) {
 			await bulkTagAssets({
 				tagBulkAssetsDto: { assetIds: chunk, tagIds: [pickTagId] },
 			});
 		}
-		for (const chunk of chunkArray(rejects, CHUNK_SIZE)) {
+		for (const chunk of chunkArray<string>(rejects, CHUNK_SIZE)) {
 			await bulkTagAssets({
 				tagBulkAssetsDto: { assetIds: chunk, tagIds: [rejectTagId] },
 			});
