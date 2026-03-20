@@ -1,7 +1,7 @@
 import { serve } from "bun";
 import index from "./index.html";
 
-import { getBuckets, getPhotos, persistPhotos } from "./api/photos";
+import { getBuckets, getPhotos, persistPhotos, proxyAsset } from "./api/photos";
 
 const server = serve({
   routes: {
@@ -9,6 +9,7 @@ const server = serve({
     "/api/buckets": getBuckets,
     "/api/photos": getPhotos,
     "/api/persist": persistPhotos,
+    "/proxy/*": proxyAsset,
   },
 
   development: process.env.NODE_ENV !== "production" && {

@@ -28,19 +28,10 @@ const TAG_KEEP = process.env.IMMICH_TAG_KEEP ?? "Cullich-Keep";
 const TAG_REJECT = process.env.IMMICH_TAG_REJECT ?? "Cullich-Reject";
 
 const url = (path: string, query?: string) => {
-  const parsedUrl = URL.parse(IMMICH_BASE_URL);
-  if (!parsedUrl) return path;
+  if (query) query = `?${query}`;
+  else query = "";
 
-  parsedUrl.pathname = join(parsedUrl.pathname, path);
-  parsedUrl.search = parsedUrl.search
-    ? parsedUrl.search + `&apiKey=${process.env.IMMICH_API_KEY}`
-    : `?apiKey=${process.env.IMMICH_API_KEY}`;
-
-  if (query) {
-    parsedUrl.search += `&${query}`;
-  }
-
-  return parsedUrl;
+  return `/proxy${path}${query}`;
 };
 
 const fetchPhotos = async (dto: MetadataSearchDto, additional = {}) => {
@@ -212,4 +203,18 @@ export const persistPhotos = {
     // Done.
     return Response.json({ saved: true });
   },
+};
+
+export const proxyAsset = async (req: Request) => {
+  const url = new URL(req.url);
+  const path = url.pathname.replace(/^\/proxy/, "");
+  const target = new URL(`/api${path}`, IMMICH_BASE_URL);
+
+  // Copy existing query params and add the token
+  url.searchParams.forEach((value, key) => {
+    target.searchParams.set(key, value);
+  });
+  target.searchParams.set("apiKey", IMMICH_API_KEY);
+
+  return fetch(target);
 };
