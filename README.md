@@ -25,6 +25,8 @@ When loading cullich in the web browser it will default to the current time buck
 
 To navigate between them you can use the arrow keys, however ideally you immediately start culling with the `,` (reject) and `.` (keep) buttons. On doing this it will mark it as reject or keep and advance to the next slide. Spacebar "zooms" for closer inspection, or plays video. Nothing is actually persisted until you hit the Save button. In the top left you can switch to another month/year.
 
+Tags is functionality in Immich that is not enabled by default, you can enable it from your account settings as described here: https://docs.immich.app/features/tags/
+
 ## Keyboard Shortcuts
 | Shortcut | Description |
 | --- | --- |
@@ -47,6 +49,14 @@ Here is a quick overview (also available in `.env.example`).
 | IMMICH_API_KEY | yes | [Create an API key here](https://my.immich.app/user-settings?isOpen=api-keys) |
 | IMMICH_TAG_KEEP | no | Defaults to "Cullich-Keep" |
 | IMMICH_TAG_REJECT | no | Defaults to "Cullich-Reject" |
+
+## Immich API requirements
+The Immich API key for Cullich requirese these permissions:
+
+- asset.read
+- asset.view
+- tag.asset
+- tag.create
 
 ## Development
 To install dependencies:
