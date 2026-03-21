@@ -1,5 +1,5 @@
-import type { Photo } from "../types";
 import type { PropsWithChildren } from "react";
+import type { Photo } from "../types";
 
 export function UnsavedModal({
   pendingLabel,

@@ -1,5 +1,5 @@
-import type { Direction, Month, IndexedMonth } from "../types";
-import { useState, useEffect, type PropsWithChildren } from "react";
+import { type PropsWithChildren, useEffect, useState } from "react";
+import type { Direction, IndexedMonth, Month } from "../types";
 
 const ABBR = [
   "Jan",

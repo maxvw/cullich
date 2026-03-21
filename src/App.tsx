@@ -1,41 +1,40 @@
 import "./index.css";
 
-import type {
-  PhotoStatus,
-  Direction,
-  Month,
-  PendingMonth,
-  HistoryEntry,
-  IndexedMonth,
-  Photo,
-} from "./types";
-
 import {
-  useState,
-  useEffect,
-  useCallback,
-  useRef,
   type PropsWithChildren,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
 } from "react";
-
-import { usePreloader } from "./hooks/usePreloader";
-import { SubmitModal } from "./components/SubmitModal";
-import { UnsavedModal } from "./components/UnsavedModal";
 import { MonthGridPicker } from "./components/MonthGridPicker";
 import { PlayIcon } from "./components/PlayIcon";
+import { SubmitModal } from "./components/SubmitModal";
+import { UnsavedModal } from "./components/UnsavedModal";
+import { useAutoSave } from "./hooks/useAutoSave";
+import { usePreloader } from "./hooks/usePreloader";
+import type {
+  Direction,
+  HistoryEntry,
+  IndexedMonth,
+  Month,
+  PendingMonth,
+  Photo,
+  PhotoStatus,
+} from "./types";
 
 async function getPhotosForMonth(
   year: number,
   month: number,
 ): Promise<Photo[]> {
-  let result = await fetch(`/api/photos?year=${year}&month=${month}`);
-  let { photos } = await result.json();
+  const result = await fetch(`/api/photos?year=${year}&month=${month}`);
+  const { photos } = await result.json();
 
   return photos;
 }
 
 async function fetchMonths(): Promise<Month[]> {
-  let result = await fetch("/api/buckets");
+  const result = await fetch("/api/buckets");
   return await result.json();
 }
 
@@ -78,6 +77,13 @@ export function App() {
   const [pendingSwitch, setPendingSwitch] = useState<PendingMonth | null>(null);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [autoSave, setAutoSave] = useState(() => {
+    try {
+      return localStorage.getItem("cull:autoSave") === "true";
+    } catch {
+      return false;
+    }
+  });
   const [showMonthDropdown, setShowMonthDropdown] = useState(false);
   const filmstripRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -265,6 +271,18 @@ export function App() {
     setIsPlaying((v) => !v);
   }, [photo]);
 
+  const toggleAutoSave = useCallback(() => {
+    setAutoSave((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem("cull:autoSave", String(next));
+      } catch {
+        // storage unavailable, preference just won't persist
+      }
+      return next;
+    });
+  }, []);
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (!photo) return;
@@ -363,6 +381,20 @@ export function App() {
     );
     if (thumb) thumb.scrollIntoView({ inline: "center", behavior: "smooth" });
   }, [current]);
+
+  const handleAutoSave = useCallback(async (photos: Photo[]) => {
+    setSaving(true);
+    try {
+      await persistPhotos(photos);
+      setSaved(true);
+    } catch {
+      // silently fail for autosave — user can always manually save
+    } finally {
+      setSaving(false);
+    }
+  }, []);
+
+  useAutoSave(photos, autoSave, handleAutoSave);
 
   // While loading, render just the overlay — no photo access needed
   if (loading)
@@ -596,6 +628,24 @@ export function App() {
             ⌘⇧Z
           </button>
         </div>
+
+        <button
+          onClick={toggleAutoSave}
+          style={{
+            background: autoSave ? "rgba(74,222,128,0.08)" : "transparent",
+            border: `1px solid ${autoSave ? "#2d5c3a" : "#333"}`,
+            color: autoSave ? "#3a7a4a" : "#555",
+            padding: "4px 10px",
+            borderRadius: 4,
+            fontSize: 10,
+            letterSpacing: "0.12em",
+            cursor: "pointer",
+            fontFamily: "inherit",
+            transition: "all 0.2s",
+          }}
+        >
+          AUTO
+        </button>
 
         <button
           onClick={() => !saving && setShowSubmitModal(true)}

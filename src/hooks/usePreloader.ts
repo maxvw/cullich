@@ -1,6 +1,5 @@
-import type { Photo } from "../types";
-
 import { useEffect } from "react";
+import type { Photo } from "../types";
 
 export function usePreloader(photos: Photo[], currentIndex: number) {
   useEffect(() => {

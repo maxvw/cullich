@@ -1,5 +1,5 @@
+import { type PropsWithChildren, useEffect } from "react";
 import type { Photo } from "../types";
-import { useEffect, type PropsWithChildren } from "react";
 
 export function SubmitModal({
   photos,

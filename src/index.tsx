@@ -1,7 +1,6 @@
 import { serve } from "bun";
-import index from "./index.html";
-
 import { getBuckets, getPhotos, persistPhotos, proxyAsset } from "./api/photos";
+import index from "./index.html";
 
 const server = serve({
   routes: {

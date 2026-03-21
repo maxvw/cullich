@@ -1,20 +1,20 @@
 import {
-  init,
-  upsertTags,
-  searchAssets,
-  untagAssets,
-  bulkTagAssets,
+  type AssetResponseDto,
   AssetVisibility,
-  getTimeBuckets,
-  getAssetThumbnailPath,
+  bulkTagAssets,
   getAssetOriginalPath,
   getAssetPlaybackPath,
-  type AssetResponseDto,
+  getAssetThumbnailPath,
+  getTimeBuckets,
+  init,
   type MetadataSearchDto,
+  searchAssets,
+  untagAssets,
+  upsertTags,
 } from "@immich/sdk";
 import { join } from "path";
-import { chunkArray } from "../utils/chunkArray";
 import type { Asset } from "../types";
+import { chunkArray } from "../utils/chunkArray";
 
 const IMMICH_BASE_URL = process.env.IMMICH_BASE_URL ?? "https://example.com";
 const IMMICH_API_KEY = process.env.IMMICH_API_KEY ?? "abc123";
