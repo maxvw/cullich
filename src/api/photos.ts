@@ -210,11 +210,45 @@ export const proxyAsset = async (req: Request) => {
   const path = url.pathname.replace(/^\/proxy/, "");
   const target = new URL(`/api${path}`, IMMICH_BASE_URL);
 
-  // Copy existing query params and add the token
   url.searchParams.forEach((value, key) => {
     target.searchParams.set(key, value);
   });
   target.searchParams.set("apiKey", IMMICH_API_KEY);
 
-  return fetch(target);
+  // Forward headers that matter for video streaming
+  const headers = new Headers();
+  const forwardHeaders = [
+    "range",
+    "if-range",
+    "if-none-match",
+    "if-modified-since",
+  ];
+  for (const name of forwardHeaders) {
+    const value = req.headers.get(name);
+    if (value) headers.set(name, value);
+  }
+
+  const res = await fetch(target, { headers });
+
+  // Forward response headers the browser needs
+  const responseHeaders = new Headers();
+  const passHeaders = [
+    "content-type",
+    "content-length",
+    "content-range",
+    "accept-ranges",
+    "etag",
+    "last-modified",
+    "cache-control",
+  ];
+  for (const name of passHeaders) {
+    const value = res.headers.get(name);
+    if (value) responseHeaders.set(name, value);
+  }
+
+  return new Response(res.body, {
+    status: res.status, // preserves 206 Partial Content
+    statusText: res.statusText,
+    headers: responseHeaders,
+  });
 };
