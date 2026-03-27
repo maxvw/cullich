@@ -49,6 +49,7 @@ Here is a quick overview (also available in `.env.example`).
 | IMMICH_API_KEY | yes | [Create an API key here](https://my.immich.app/user-settings?isOpen=api-keys) |
 | IMMICH_TAG_KEEP | no | Defaults to "Cullich-Keep" |
 | IMMICH_TAG_REJECT | no | Defaults to "Cullich-Reject" |
+| IMMICH_TAG_PREFIX | no | Defaults to "Cullich-" |
 
 ## Immich API requirements
 The Immich API key for Cullich requirese these permissions:

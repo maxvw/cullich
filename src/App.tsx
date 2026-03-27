@@ -9,6 +9,7 @@ import {
 } from "react";
 import { MonthGridPicker } from "./components/MonthGridPicker";
 import { PlayIcon } from "./components/PlayIcon";
+import { SettingsModal } from "./components/SettingsModal";
 import { SubmitModal } from "./components/SubmitModal";
 import { UnsavedModal } from "./components/UnsavedModal";
 import { useAutoSave } from "./hooks/useAutoSave";
@@ -21,15 +22,24 @@ import type {
   PendingMonth,
   Photo,
   PhotoStatus,
+  TagBinding,
 } from "./types";
 
 async function getPhotosForMonth(
   year: number,
   month: number,
+  tagBindings: TagBinding[],
 ): Promise<Photo[]> {
-  const result = await fetch(`/api/photos?year=${year}&month=${month}`);
+  const tagNames = tagBindings.map((b) => b.name);
+  const params = new URLSearchParams({
+    year: String(year),
+    month: String(month),
+  });
+  if (tagNames.length > 0) {
+    params.set("tags", tagNames.join(","));
+  }
+  const result = await fetch(`/api/photos?${params}`);
   const { photos } = await result.json();
-
   return photos;
 }
 
@@ -38,17 +48,55 @@ async function fetchMonths(): Promise<Month[]> {
   return await result.json();
 }
 
-async function persistPhotos(photos: Photo[]) {
+async function persistPhotos(photos: Photo[], tagBindings: TagBinding[]) {
   const picks = photos.filter((p) => p.status === "pick").map((p) => p.id);
   const rejects = photos.filter((p) => p.status === "reject").map((p) => p.id);
 
+  // Build tag map: { "Dog": ["id1", "id2"], "Family": ["id3"] }
+  const tags: Record<string, string[]> = {};
+  // Build untag map: assets that had a tag initially but no longer do
+  const untags: Record<string, string[]> = {};
+
+  for (const binding of tagBindings) {
+    tags[binding.name] = photos
+      .filter((p) => p.tags.includes(binding.name))
+      .map((p) => p.id);
+
+    const removed = photos
+      .filter(
+        (p) =>
+          p.initialTags.includes(binding.name) &&
+          !p.tags.includes(binding.name),
+      )
+      .map((p) => p.id);
+    if (removed.length > 0) {
+      untags[binding.name] = removed;
+    }
+  }
+
   await fetch("/api/persist", {
     method: "POST",
-    body: JSON.stringify({
-      picks,
-      rejects,
-    }),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ picks, rejects, tags, untags }),
   });
+}
+
+function loadTagBindings(): TagBinding[] {
+  try {
+    const raw = localStorage.getItem("cull:tagBindings");
+    if (raw) return JSON.parse(raw);
+  } catch {
+    // ignore
+  }
+  return [];
+}
+
+function saveTagBindings(bindings: TagBinding[]) {
+  try {
+    localStorage.setItem("cull:tagBindings", JSON.stringify(bindings));
+  } catch {
+    // storage unavailable
+  }
 }
 
 const statusColor = {
@@ -74,6 +122,7 @@ export function App() {
   const [zoom, setZoom] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [pendingSwitch, setPendingSwitch] = useState<PendingMonth | null>(null);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -84,11 +133,14 @@ export function App() {
       return false;
     }
   });
+  const [tagBindings, setTagBindings] = useState<TagBinding[]>(loadTagBindings);
   const [showMonthDropdown, setShowMonthDropdown] = useState(false);
   const filmstripRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef(null);
   const loadRef = useRef(0); // tracks latest load request to discard stale responses
+  const tagBindingsRef = useRef(tagBindings);
+  tagBindingsRef.current = tagBindings;
 
   usePreloader(photos, current);
 
@@ -116,19 +168,26 @@ export function App() {
         });
         window.history.replaceState(null, "", `?${syncParams}`);
       }
-      getPhotosForMonth(m.year, m.month).then((photos) => {
-        setPhotos(photos);
-        const firstUnreviewed = photos.findIndex(
-          (p) => p.status === "unreviewed",
-        );
-        setCurrent(firstUnreviewed >= 0 ? firstUnreviewed : 0);
-        setLoading(false);
-      });
+      getPhotosForMonth(m.year, m.month, tagBindingsRef.current).then(
+        (photos) => {
+          setPhotos(photos);
+          const firstUnreviewed = photos.findIndex(
+            (p) => p.status === "unreviewed",
+          );
+          setCurrent(firstUnreviewed >= 0 ? firstUnreviewed : 0);
+          setLoading(false);
+        },
+      );
     });
   }, []);
 
   const photo = photos[current];
-  const hasUnsavedWork = photos.some((p) => p.status !== p.initialStatus);
+  const hasUnsavedWork = photos.some(
+    (p) =>
+      p.status !== p.initialStatus ||
+      JSON.stringify([...p.tags].sort()) !==
+        JSON.stringify([...p.initialTags].sort()),
+  );
   const currentMonth = months[selectedMonthIdx];
 
   // Stop playback when navigating away
@@ -172,7 +231,11 @@ export function App() {
       });
       window.history.replaceState(null, "", `?${params}`);
     }
-    getPhotosForMonth(monthObj.year, monthObj.month).then((result) => {
+    getPhotosForMonth(
+      monthObj.year,
+      monthObj.month,
+      tagBindingsRef.current,
+    ).then((result) => {
       if (loadRef.current === reqId) {
         setPhotos(result);
         const firstUnreviewed = result.findIndex(
@@ -199,9 +262,21 @@ export function App() {
     [hasUnsavedWork, saved, selectedMonthIdx, doSwitch],
   );
 
+  // Build tag color lookup from bindings
+  const tagColorMap: Record<string, string> = {};
+  for (const b of tagBindings) {
+    tagColorMap[b.name] = b.color;
+  }
+
   const filteredIndices = photos
     .map((p, i) => ({ ...p, originalIndex: i }))
-    .filter((p) => filter === "all" || p.status === filter)
+    .filter((p) => {
+      if (filter === "all") return true;
+      if (filter === "unreviewed" || filter === "pick" || filter === "reject")
+        return p.status === filter;
+      // Tag filter
+      return p.tags.includes(filter);
+    })
     .map((p) => p.originalIndex);
 
   const currentFilterPos = filteredIndices.indexOf(current);
@@ -220,7 +295,10 @@ export function App() {
       const from = photos[current].status;
       if (from !== status) {
         setUndoStack((s) => ({
-          history: [...s.history, { index: current, from, to: status }],
+          history: [
+            ...s.history,
+            { type: "status", index: current, from, to: status },
+          ],
           future: [],
         }));
         setPhotos((ps) =>
@@ -240,15 +318,58 @@ export function App() {
     [current, photos, go],
   );
 
+  const toggleTag = useCallback(
+    (index: number, tagName: string) => {
+      const p = photos[index];
+      if (!p) return;
+      const has = p.tags.includes(tagName);
+      const action = has ? "remove" : "add";
+      setUndoStack((s) => ({
+        history: [...s.history, { type: "tag", index, tag: tagName, action }],
+        future: [],
+      }));
+      setPhotos((ps) =>
+        ps.map((ph, i) => {
+          if (i !== index) return ph;
+          return {
+            ...ph,
+            tags: has
+              ? ph.tags.filter((t) => t !== tagName)
+              : [...ph.tags, tagName],
+          };
+        }),
+      );
+      setSaved(false);
+      setSaving(false);
+    },
+    [photos],
+  );
+
   const undo = useCallback(() => {
     setUndoStack((s) => {
       if (!s.history.length) return s;
       const entry = s.history[s.history.length - 1];
-      setPhotos((ps) =>
-        ps.map((p, i) =>
-          i === entry.index ? { ...p, status: entry.from } : p,
-        ),
-      );
+      if (entry.type === "status") {
+        setPhotos((ps) =>
+          ps.map((p, i) =>
+            i === entry.index ? { ...p, status: entry.from } : p,
+          ),
+        );
+      } else {
+        // tag entry — reverse the action
+        setPhotos((ps) =>
+          ps.map((p, i) => {
+            if (i !== entry.index) return p;
+            return {
+              ...p,
+              tags:
+                entry.action === "add"
+                  ? p.tags.filter((t) => t !== entry.tag)
+                  : [...p.tags, entry.tag],
+            };
+          }),
+        );
+      }
       setCurrent(entry.index);
       return { history: s.history.slice(0, -1), future: [...s.future, entry] };
     });
@@ -258,9 +379,27 @@ export function App() {
     setUndoStack((s) => {
       if (!s.future.length) return s;
       const entry = s.future[s.future.length - 1];
-      setPhotos((ps) =>
-        ps.map((p, i) => (i === entry.index ? { ...p, status: entry.to } : p)),
-      );
+      if (entry.type === "status") {
+        setPhotos((ps) =>
+          ps.map((p, i) =>
+            i === entry.index ? { ...p, status: entry.to } : p,
+          ),
+        );
+      } else {
+        // tag entry — re-apply the action
+        setPhotos((ps) =>
+          ps.map((p, i) => {
+            if (i !== entry.index) return p;
+            return {
+              ...p,
+              tags:
+                entry.action === "add"
+                  ? [...p.tags, entry.tag]
+                  : p.tags.filter((t) => t !== entry.tag),
+            };
+          }),
+        );
+      }
       setCurrent(entry.index);
       return { history: [...s.history, entry], future: s.future.slice(0, -1) };
     });
@@ -271,24 +410,37 @@ export function App() {
     setIsPlaying((v) => !v);
   }, [photo]);
 
-  const toggleAutoSave = useCallback(() => {
-    setAutoSave((v) => {
-      const next = !v;
-      try {
-        localStorage.setItem("cull:autoSave", String(next));
-      } catch {
-        // storage unavailable, preference just won't persist
-      }
-      return next;
-    });
+  const handleAutoSaveChange = useCallback((v: boolean) => {
+    setAutoSave(v);
+    try {
+      localStorage.setItem("cull:autoSave", String(v));
+    } catch {
+      // storage unavailable
+    }
   }, []);
+
+  const handleTagBindingsChange = useCallback((bindings: TagBinding[]) => {
+    setTagBindings(bindings);
+    saveTagBindings(bindings);
+  }, []);
+
+  // Build keybinding lookup for keyboard handler
+  const tagKeyMap = useRef<Record<string, string>>({});
+  tagKeyMap.current = Object.fromEntries(
+    tagBindings.map((b) => [b.key, b.name]),
+  );
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (!photo) return;
       if (!e.target) return;
       const target = e.target as HTMLElement;
-      if (target.tagName === "INPUT" || showSubmitModal || pendingSwitch)
+      if (
+        target.tagName === "INPUT" ||
+        showSubmitModal ||
+        pendingSwitch ||
+        showSettings
+      )
         return;
       // Don't intercept space/arrows when video controls are focused
       if (target.tagName === "VIDEO") return;
@@ -358,6 +510,16 @@ export function App() {
             setShowMonthDropdown(false);
           }
           break;
+        default: {
+          // Check tag keybindings
+          if (!e.metaKey && !e.ctrlKey && !e.altKey) {
+            const tagName = tagKeyMap.current[e.key];
+            if (tagName) {
+              e.preventDefault();
+              toggleTag(current, tagName);
+            }
+          }
+        }
       }
     };
     window.addEventListener("keydown", handler);
@@ -368,10 +530,13 @@ export function App() {
     undo,
     redo,
     showSubmitModal,
+    showSettings,
     pendingSwitch,
     photo,
     isPlaying,
     togglePlay,
+    toggleTag,
+    current,
   ]);
 
   useEffect(() => {
@@ -385,7 +550,7 @@ export function App() {
   const handleAutoSave = useCallback(async (photos: Photo[]) => {
     setSaving(true);
     try {
-      await persistPhotos(photos);
+      await persistPhotos(photos, tagBindingsRef.current);
       setSaved(true);
     } catch {
       // silently fail for autosave — user can always manually save
@@ -456,18 +621,24 @@ export function App() {
       ? ((photos.length - unreviewed) / photos.length) * 100
       : 0;
 
-  const tabBtn = (active: boolean) => ({
-    background: active ? "#222" : "transparent",
-    border: `1px solid ${active ? "#444" : "#222"}`,
-    color: active ? "#e8e8e8" : "#555",
+  const tabBtn = (active: boolean, color?: string) => ({
+    background: active ? (color ? `${color}18` : "#222") : "transparent",
+    border: `1px solid ${active ? (color ?? "#444") : "#222"}`,
+    color: active ? (color ?? "#e8e8e8") : "#555",
     padding: "3px 10px",
     borderRadius: 4,
     fontSize: 10,
     letterSpacing: "0.1em",
     cursor: "pointer",
-    textTransform: "uppercase",
+    textTransform: "uppercase" as const,
     fontFamily: "inherit",
   });
+
+  // Count photos with each tag for filter display
+  const tagCounts: Record<string, number> = {};
+  for (const b of tagBindings) {
+    tagCounts[b.name] = photos.filter((p) => p.tags.includes(b.name)).length;
+  }
 
   return (
     <div
@@ -574,7 +745,7 @@ export function App() {
           <span style={{ color: "#555" }}>· {unreviewed}</span>
         </div>
 
-        <div style={{ display: "flex", gap: 4 }}>
+        <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
           {["all", "unreviewed", "pick", "reject"].map((f) => (
             <button
               key={f}
@@ -590,6 +761,21 @@ export function App() {
               {f}
             </button>
           ))}
+          {tagBindings.map((b) =>
+            tagCounts[b.name] > 0 ? (
+              <button
+                key={`tag:${b.name}`}
+                style={tabBtn(filter === b.name, b.color)}
+                onClick={() => {
+                  setFilter(b.name);
+                  const idx = photos.findIndex((p) => p.tags.includes(b.name));
+                  if (idx !== -1) setCurrent(idx);
+                }}
+              >
+                {b.name} ({tagCounts[b.name]})
+              </button>
+            ) : null,
+          )}
         </div>
 
         <div style={{ display: "flex", gap: 4 }}>
@@ -629,22 +815,23 @@ export function App() {
           </button>
         </div>
 
+        {/* Settings gear */}
         <button
-          onClick={toggleAutoSave}
+          onClick={() => setShowSettings(true)}
           style={{
-            background: autoSave ? "rgba(74,222,128,0.08)" : "transparent",
-            border: `1px solid ${autoSave ? "#2d5c3a" : "#333"}`,
-            color: autoSave ? "#3a7a4a" : "#555",
+            background: "transparent",
+            border: "1px solid #333",
+            color: "#555",
             padding: "4px 10px",
             borderRadius: 4,
-            fontSize: 10,
-            letterSpacing: "0.12em",
+            fontSize: 12,
             cursor: "pointer",
             fontFamily: "inherit",
             transition: "all 0.2s",
           }}
+          title="Settings"
         >
-          AUTO
+          ⚙
         </button>
 
         <button
@@ -744,6 +931,42 @@ export function App() {
             }}
           >
             {statusLabel[photo.status]}
+          </div>
+        )}
+
+        {/* Tag badges below status */}
+        {photo.tags.length > 0 && (
+          <div
+            style={{
+              position: "absolute",
+              top: photo.status !== "unreviewed" ? 52 : 20,
+              left: 20,
+              zIndex: 10,
+              display: "flex",
+              gap: 6,
+              flexWrap: "wrap",
+            }}
+          >
+            {photo.tags.map((t) => {
+              const color = tagColorMap[t] ?? "#888";
+              return (
+                <div
+                  key={t}
+                  style={{
+                    background: `${color}22`,
+                    border: `1px solid ${color}66`,
+                    color,
+                    padding: "3px 10px",
+                    borderRadius: 3,
+                    fontSize: 10,
+                    letterSpacing: "0.15em",
+                    fontWeight: 600,
+                  }}
+                >
+                  {t.toUpperCase()}
+                </div>
+              );
+            })}
           </div>
         )}
 
@@ -1046,6 +1269,7 @@ export function App() {
         style={{
           display: "flex",
           justifyContent: "center",
+          alignItems: "center",
           gap: 16,
           padding: "12px 0",
           borderTop: "1px solid #1a1a1a",
@@ -1088,6 +1312,44 @@ export function App() {
             {label} <span style={{ fontSize: 10, opacity: 0.6 }}>({key})</span>
           </button>
         ))}
+
+        {/* Tag toggle buttons */}
+        {tagBindings.length > 0 && (
+          <>
+            <div
+              style={{
+                width: 1,
+                height: 24,
+                background: "#222",
+                flexShrink: 0,
+              }}
+            />
+            {tagBindings.map((b) => {
+              const active = photo.tags.includes(b.name);
+              return (
+                <button
+                  key={b.name}
+                  onClick={() => toggleTag(current, b.name)}
+                  style={{
+                    background: active ? `${b.color}22` : "transparent",
+                    border: `1px solid ${active ? b.color : "#333"}`,
+                    color: active ? b.color : "#555",
+                    padding: "8px 18px",
+                    borderRadius: 4,
+                    fontSize: 11,
+                    letterSpacing: "0.12em",
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                    transition: "all 0.15s",
+                  }}
+                >
+                  {b.name.toUpperCase()}{" "}
+                  <span style={{ fontSize: 10, opacity: 0.6 }}>({b.key})</span>
+                </button>
+              );
+            })}
+          </>
+        )}
       </div>
 
       {/* ── Filmstrip ── */}
@@ -1166,6 +1428,33 @@ export function App() {
               </div>
             )}
 
+            {/* Tag dots — left edge, stacked vertically */}
+            {p.tags.length > 0 && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: 3,
+                  left: 3,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 2,
+                }}
+              >
+                {p.tags.map((t) => (
+                  <div
+                    key={t}
+                    style={{
+                      width: 6,
+                      height: 6,
+                      borderRadius: "50%",
+                      background: tagColorMap[t] ?? "#888",
+                      boxShadow: `0 0 3px ${tagColorMap[t] ?? "#888"}`,
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+
             {/* Status dot */}
             {p.status !== "unreviewed" && (
               <div
@@ -1209,6 +1498,11 @@ export function App() {
         ) : (
           <span>SPACE ZOOM</span>
         )}
+        {tagBindings.map((b) => (
+          <span key={b.name} style={{ color: `${b.color}88` }}>
+            {b.key.toUpperCase()} {b.name.toUpperCase()}
+          </span>
+        ))}
       </div>
 
       {/* ── Modals ── */}
@@ -1216,11 +1510,12 @@ export function App() {
         <SubmitModal
           photos={photos}
           monthLabel={currentMonth.label}
+          tagBindings={tagBindings}
           isSaving={saving}
           onConfirm={async () => {
             setSaving(true);
             try {
-              await persistPhotos(photos);
+              await persistPhotos(photos, tagBindings);
               setSaved(true);
               setShowSubmitModal(false);
             } finally {
@@ -1228,6 +1523,15 @@ export function App() {
             }
           }}
           onCancel={() => setShowSubmitModal(false)}
+        />
+      )}
+      {showSettings && (
+        <SettingsModal
+          tagBindings={tagBindings}
+          autoSave={autoSave}
+          onTagBindingsChange={handleTagBindingsChange}
+          onAutoSaveChange={handleAutoSaveChange}
+          onClose={() => setShowSettings(false)}
         />
       )}
       {pendingSwitch && (

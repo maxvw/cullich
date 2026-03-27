@@ -1,15 +1,17 @@
 import { type PropsWithChildren, useEffect } from "react";
-import type { Photo } from "../types";
+import type { Photo, TagBinding } from "../types";
 
 export function SubmitModal({
   photos,
   monthLabel,
+  tagBindings,
   onConfirm,
   onCancel,
   isSaving,
 }: PropsWithChildren<{
   photos: Photo[];
   monthLabel: string;
+  tagBindings: TagBinding[];
   onConfirm: () => void;
   onCancel: () => void;
   isSaving: boolean;
@@ -32,6 +34,16 @@ export function SubmitModal({
   const picks = photos.filter((p) => p.status === "pick");
   const rejects = photos.filter((p) => p.status === "reject");
   const unreviewed = photos.filter((p) => p.status === "unreviewed");
+
+  // Count photos per tag
+  const tagStats = tagBindings
+    .map((b) => ({
+      name: b.name,
+      color: b.color,
+      count: photos.filter((p) => p.tags.includes(b.name)).length,
+    }))
+    .filter((t) => t.count > 0);
+
   return (
     <div
       onClick={() => {
@@ -128,6 +140,55 @@ export function SubmitModal({
             </div>
           ))}
         </div>
+
+        {/* Tag summary */}
+        {tagStats.length > 0 && (
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              marginBottom: 20,
+              flexWrap: "wrap",
+            }}
+          >
+            {tagStats.map((t) => (
+              <div
+                key={t.name}
+                style={{
+                  background: `${t.color}12`,
+                  border: `1px solid ${t.color}44`,
+                  borderRadius: 4,
+                  padding: "6px 12px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                }}
+              >
+                <div
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: "50%",
+                    background: t.color,
+                  }}
+                />
+                <span style={{ fontSize: 11, color: t.color, fontWeight: 600 }}>
+                  {t.count}
+                </span>
+                <span
+                  style={{
+                    fontSize: 9,
+                    color: "#555",
+                    letterSpacing: "0.1em",
+                  }}
+                >
+                  {t.name.toUpperCase()}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
         {unreviewed.length > 0 && (
           <div
             style={{
