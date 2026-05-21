@@ -9,8 +9,11 @@ export type Direction = "left" | "right" | null;
 export interface Month {
   year: number;
   month: number;
-  count: number;
   label: string;
+  total: number;
+  picked: number;
+  rejected: number;
+  unreviewed: number;
 }
 
 export interface PendingMonth {

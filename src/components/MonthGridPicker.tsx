@@ -188,11 +188,22 @@ export function MonthGridPicker({
           {grid.map((m, mi) => {
             const isSelected = m && m.idx === selectedMonthIdx;
             const hasPhotos = m !== null;
+            const isComplete = hasPhotos && m.unreviewed === 0;
+            const isInProgress = hasPhotos && m.unreviewed != m.total;
+            let progressPct = hasPhotos
+              ? Math.round(100 - (m.unreviewed / m.total) * 100)
+              : 0;
+            if (isNaN(progressPct)) progressPct = 0;
+
             return (
               <div
                 key={mi}
                 onClick={() => hasPhotos && onSelect(m, m.idx)}
-                title={hasPhotos ? `${m.count} photos` : undefined}
+                title={
+                  hasPhotos
+                    ? `${m.total} photos, ${m.unreviewed} unreviewed (${progressPct}%)`
+                    : undefined
+                }
                 style={{
                   padding: "7px 2px 5px",
                   borderRadius: 4,
@@ -201,31 +212,59 @@ export function MonthGridPicker({
                   cursor: hasPhotos ? "pointer" : "default",
                   background: isSelected
                     ? "rgba(74,222,128,0.15)"
-                    : hasPhotos
-                      ? "rgba(255,255,255,0.03)"
-                      : "transparent",
+                    : isComplete
+                      ? "rgba(96,165,250,0.10)"
+                      : isInProgress
+                        ? "rgba(255,200,0,0.2)"
+                        : hasPhotos
+                          ? "rgba(255,255,255,0.07)"
+                          : "transparent",
                   border: isSelected
                     ? "1px solid rgba(74,222,128,0.4)"
-                    : hasPhotos
-                      ? "1px solid #1e1e1e"
-                      : "1px solid transparent",
+                    : isComplete
+                      ? "1px solid rgba(96,165,250,0.35)"
+                      : isInProgress
+                        ? "1px solid rgba(255,200,0,0.45)"
+                        : hasPhotos
+                          ? "1px solid #2f2f2f"
+                          : "1px solid transparent",
                   color: isSelected
                     ? "#4ade80"
-                    : hasPhotos
-                      ? "#aaa"
-                      : "#282828",
+                    : isComplete
+                      ? "#93c5fd"
+                      : isInProgress
+                        ? "#ffc800"
+                        : hasPhotos
+                          ? "#aaa"
+                          : "#282828",
                   transition: "background 0.1s, color 0.1s",
                 }}
                 onMouseEnter={(e) => {
                   if (hasPhotos && !isSelected) {
-                    e.currentTarget.style.background = "rgba(255,255,255,0.07)";
-                    e.currentTarget.style.color = "#e8e8e8";
+                    e.currentTarget.style.background = isComplete
+                      ? "rgba(96,165,250,0.18)"
+                      : isInProgress
+                        ? "rgba(255,200,0,0.25)"
+                        : "rgba(255,255,255,0.07)";
+                    e.currentTarget.style.color = isComplete
+                      ? "#bfdbfe"
+                      : isInProgress
+                        ? "#ffe566"
+                        : "#e8e8e8";
                   }
                 }}
                 onMouseLeave={(e) => {
                   if (hasPhotos && !isSelected) {
-                    e.currentTarget.style.background = "rgba(255,255,255,0.03)";
-                    e.currentTarget.style.color = "#aaa";
+                    e.currentTarget.style.background = isComplete
+                      ? "rgba(96,165,250,0.10)"
+                      : isInProgress
+                        ? "rgba(255,200,0,0.2)"
+                        : "rgba(255,255,255,0.03)";
+                    e.currentTarget.style.color = isComplete
+                      ? "#93c5fd"
+                      : isInProgress
+                        ? "#ffc800"
+                        : "#aaa";
                   }
                 }}
               >
@@ -233,11 +272,17 @@ export function MonthGridPicker({
                 <div
                   style={{
                     fontSize: 8,
-                    color: isSelected ? "rgba(74,222,128,0.6)" : "#383838",
+                    color: isSelected
+                      ? "rgba(74,222,128,0.6)"
+                      : isComplete
+                        ? "rgba(96,165,250,0.5)"
+                        : isInProgress
+                          ? "rgba(255,200,0,0.5)"
+                          : "#383838",
                     marginTop: 2,
                   }}
                 >
-                  {hasPhotos ? m.count : "·"}
+                  {hasPhotos ? m.total : "·"}
                 </div>
               </div>
             );

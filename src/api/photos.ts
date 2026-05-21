@@ -2,10 +2,12 @@ import {
   type AssetResponseDto,
   AssetVisibility,
   bulkTagAssets,
+  getAllTags,
   getAssetOriginalPath,
   getAssetPlaybackPath,
   getAssetThumbnailPath,
   getTimeBuckets,
+  getTimeBucket,
   init,
   type MetadataSearchDto,
   searchAssets,
@@ -90,22 +92,51 @@ function immichTagName(name: string): string {
 }
 
 export const getBuckets = async (req: Request) => {
+  // Get tag IDs for keep/reject
+  // For this representation we don't care about our custom tags, as keep/reject
+  // are the main metrics when considering "unreviewed" count.
+  const tags = [
+    { name: TAG_KEEP, id: await getTagId(TAG_KEEP) },
+    { name: TAG_REJECT, id: await getTagId(TAG_REJECT) },
+  ];
+
+  // Get total counts per month (unfiltered)
   const buckets = await getTimeBuckets({});
 
+  // Get counts per tag per month
+  const tagBuckets = await Promise.all(
+    tags.map(async (tag) => {
+      const buckets = await getTimeBuckets({ tagId: tag.id });
+      return { tag, buckets };
+    }),
+  );
+
+  // Build summary
   return Response.json(
     buckets.map((bucket) => {
       const [year, month] = bucket.timeBucket.split("-").map(Number);
-      const monthYear = new Date(year, month - 1).toLocaleString("default", {
+      const total = bucket.count;
+      const label = new Date(year, month - 1).toLocaleString("default", {
         month: "long",
         year: "numeric",
       });
 
-      return {
-        year,
-        month,
-        label: monthYear,
-        count: bucket.count,
-      };
+      const tagged: Record<string, number> = {};
+      for (const { tag, buckets } of tagBuckets) {
+        const tagBucket = buckets.find(
+          (b) => b.timeBucket === bucket.timeBucket,
+        );
+        if (tagBucket?.count) {
+          tagged[tag.name] = tagBucket.count;
+        }
+      }
+
+      const taggedTotal = Object.values(tagged).reduce((a, b) => a + b, 0);
+      const unreviewed = total - taggedTotal;
+      const picked = tagged[TAG_KEEP] ?? 0;
+      const rejected = tagged[TAG_REJECT] ?? 0;
+
+      return { year, month, label, total, picked, rejected, unreviewed };
     }),
   );
 };
