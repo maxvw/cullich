@@ -150,8 +150,12 @@ export function App() {
     fetchMonths().then((result) => {
       setMonths(result);
       const params = new URLSearchParams(window.location.search);
-      const urlYear = parseInt(params.get("year") ?? "", 10);
-      const urlMonth = parseInt(params.get("month") ?? "", 10); // 1-indexed, matches m.month
+      const userYear =
+        params.get("year") ?? localStorage.getItem("lastViewedYear") ?? "";
+      const userMonth =
+        params.get("month") ?? localStorage.getItem("lastViewedMonth") ?? "";
+      const urlYear = parseInt(userYear, 10);
+      const urlMonth = parseInt(userMonth, 10); // 1-indexed, matches m.month
       const urlIdx =
         !isNaN(urlYear) && !isNaN(urlMonth)
           ? result.findIndex((m) => m.year === urlYear && m.month === urlMonth)
@@ -230,6 +234,8 @@ export function App() {
         month: String(monthObj.month),
       });
       window.history.replaceState(null, "", `?${params}`);
+      localStorage.setItem("lastViewedYear", String(monthObj.year));
+      localStorage.setItem("lastViewedMonth", String(monthObj.month));
     }
     getPhotosForMonth(
       monthObj.year,
@@ -552,6 +558,8 @@ export function App() {
     try {
       await persistPhotos(photos, tagBindingsRef.current);
       setSaved(true);
+      const updatedMonths = await fetchMonths();
+      setMonths(updatedMonths);
     } catch {
       // silently fail for autosave — user can always manually save
     } finally {
@@ -1518,6 +1526,8 @@ export function App() {
               await persistPhotos(photos, tagBindings);
               setSaved(true);
               setShowSubmitModal(false);
+              const updatedMonths = await fetchMonths();
+              setMonths(updatedMonths);
             } finally {
               setSaving(false);
             }
